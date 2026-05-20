@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>RetailAI Recommendation Engine</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
+</head>
+
+<body>
+
+    <div class="container">
+
+        <!-- HERO SECTION -->
+
+        <div class="hero-section">
+
+            <h1>Retail AI Recommendation Engine</h1>
+
+            <p>
+                AI-Powered Retail Product Recommendation System
+            </p>
+
+        </div>
+
+        <!-- SEARCH SECTION -->
+
+        <div class="search-box">
+
+            <form method="POST">
+
+                <!-- PRODUCT -->
+
+                <select name="product">
+
+                    <option value="">Select a Product</option>
+
+                    {% for product in products %}
+
+                    <option value="{{ product }}"
+                        {% if selected_product == product %}selected{% endif %}>
+
+                        {{ product }}
+
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+                <!-- CATEGORY FILTER -->
+
+                <select name="category">
+
+                    <option value="All">All Categories</option>
+
+                    {% for category in categories %}
+
+                    <option value="{{ category }}">
+
+                        {{ category }}
+
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+                <!-- COLOR FILTER -->
+
+                <select name="color">
+
+                    <option value="All">All Colors</option>
+
+                    {% for color in colors %}
+
+                    <option value="{{ color }}">
+
+                        {{ color }}
+
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+                <!-- BUTTON -->
+
+                <button type="submit">
+
+                    Recommend
+
+                </button>
+
+            </form>
+
+        </div>
+
+        <!-- HISTORY DROPDOWN -->
+
+        <div class="history-dropdown">
+
+            <button class="history-toggle" onclick="toggleHistory()">
+
+                Recent Searches ▼
+
+            </button>
+
+            <div class="history-list" id="historyList">
+
+                {% if search_history %}
+
+                    {% for item in search_history %}
+
+                    <div class="history-item">
+
+                        {{ item }}
+
+                    </div>
+
+                    {% endfor %}
+
+                {% else %}
+
+                    <div class="history-item">
+
+                        No recent searches
+
+                    </div>
+
+                {% endif %}
+
+            </div>
+
+        </div>
+
+        <!-- POPULAR PRODUCTS -->
+
+        {% if not recommendations %}
+
+        <div class="trending-section">
+
+            <h2>🔥 Popular Retail Products</h2>
+
+            <div class="trending-container">
+
+                {% for product in trending_products %}
+
+                <div class="trending-card">
+
+                    <h3>
+
+                        {{ product['Product Name'] }}
+
+                    </h3>
+
+                    <p>
+
+                        Category:
+
+                        <span>
+
+                            {{ product['Category'] }}
+
+                        </span>
+
+                    </p>
+
+                </div>
+
+                {% endfor %}
+
+            </div>
+
+        </div>
+
+        {% endif %}
+
+        <!-- RESULTS SECTION -->
+
+        {% if recommendations %}
+
+        <div class="results-section">
+
+            <h2>
+
+                Recommended Products
+
+            </h2>
+
+            <div class="card-container">
+
+                {% for item in recommendations %}
+
+                <div class="card">
+
+                    <div class="badge">
+
+                        {{ item.similarity }} Match
+
+                    </div>
+
+                    <h3>
+
+                        {{ item.name }}
+
+                    </h3>
+
+                    <p>
+
+                        Category:
+
+                        <span>
+
+                            {{ item.category }}
+
+                        </span>
+
+                    </p>
+
+                </div>
+
+                {% endfor %}
+
+            </div>
+
+        </div>
+
+        {% endif %}
+
+    </div>
+
+    <!-- JAVASCRIPT -->
+
+    <script>
+
+        function toggleHistory() {
+
+            const history = document.getElementById("historyList");
+
+            if (history.style.display === "flex") {
+
+                history.style.display = "none";
+
+            }
+
+            else {
+
+                history.style.display = "flex";
+
+            }
+
+        }
+
+    </script>
+
+</body>
+
+</html>

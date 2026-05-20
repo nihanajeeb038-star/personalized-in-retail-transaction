@@ -1,96 +1,235 @@
-import streamlit as st
+from flask import Flask, render_template, request
+import pickle
 import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+import webbrowser
 
-# ------------------ DATA ------------------
-data = {
-    'item': [
-        'T-Shirt','Jeans','Jacket','Sneakers',
-        'Laptop','Smartphone','Headphones',
-        'Watch','Backpack','Sunglasses'
-    ],
-    'category': [
-        'clothing','clothing','clothing','footwear',
-        'electronics','electronics','electronics',
-        'accessory','accessory','accessory'
-    ],
-    'tags': [
-        'clothing casual cotton fashion',
-        'clothing denim casual fashion',
-        'clothing winter fashion warm',
-        'footwear casual sports fashion',
-        'electronics computer work tech',
-        'electronics mobile communication tech',
-        'electronics audio music tech',
-        'accessory fashion wearable time',
-        'accessory bag travel fashion',
-        'accessory fashion summer style'
-    ],
-    'price': [500,1200,2500,2000,60000,30000,2500,1500,1800,800],
-    'rating': [4.2,4.5,4.3,4.4,4.8,4.7,4.3,4.2,4.1,4.0]
-}
+app = Flask(__name__)
 
-df = pd.DataFrame(data)
+# AUTO RELOAD + NO CACHE
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
-# ------------------ RECOMMENDATION ------------------
-vectorizer = TfidfVectorizer()
-tfidf_matrix = vectorizer.fit_transform(df['tags'])
-similarity = cosine_similarity(tfidf_matrix)
+# LOAD FILES
+products = pickle.load(open('products.pkl', 'rb'))
+similarity = pickle.load(open('similarity.pkl', 'rb'))
 
-def recommend(item):
-    idx = df[df['item'] == item].index[0]
-    selected_category = df.iloc[idx]['category']
+# PRODUCT LIST
+product_list = products['Product Name'].drop_duplicates().values
 
-    scores = list(enumerate(similarity[idx]))
-    scores = sorted(scores, key=lambda x: x[1], reverse=True)[1:]
+# FILTER DATA
+categories = products['Category'].drop_duplicates().values
+colors = products['Color'].drop_duplicates().values
 
-    # ✅ Filter by similarity + category
-    filtered = [
-        (i, score) for i, score in scores
-        if score > 0.2 and df.iloc[i]['category'] == selected_category
-    ]
+# SEARCH HISTORY
+search_history = []
 
-    return [(df.iloc[i], score) for i, score in filtered[:5]]
-
-# ------------------ UI ------------------
-st.set_page_config(page_title="Retail Dashboard", layout="wide")
-
-# Title
-st.markdown(
-    "<h1 style='text-align:center; color:#6a11cb;'>🛒 Smart Retail Recommendation</h1>",
-    unsafe_allow_html=True
+# TRENDING PRODUCTS
+trending_products = (
+    products[['Product Name', 'Category']]
+    .drop_duplicates(subset='Product Name')
+    .head(6)
+    .to_dict(orient='records')
 )
 
-# Dropdown
-item = st.selectbox("Select a Product", df['item'])
+# RECOMMEND FUNCTION
+def recommend(product_name, category, color):
 
-# Button
-if st.button("Show Similar Products"):
+    recommended_products = []
 
-    st.markdown(f"### 🛍️ Similar Products for **{item}**")
+    filtered_products = products.copy()
 
-    results = recommend(item)
+    # CATEGORY FILTER
+    if category != "All":
 
-    if not results:
-        st.warning("No strong recommendations found.")
+        filtered_products = filtered_products[
+            filtered_products['Category'] == category
+        ]
+
+    # COLOR FILTER
+    if color != "All":
+
+        filtered_products = filtered_products[
+            filtered_products['Color'].str.strip().str.lower()
+            == color.strip().lower()
+        ]
+
+    # PRODUCT SIMILARITY
+    if product_name:
+
+        try:
+
+            index = products[
+                products['Product Name'] == product_name
+            ].index[0]
+
+            distances = similarity[index]
+
+            product_list_sorted = sorted(
+                list(enumerate(distances)),
+                reverse=True,
+                key=lambda x: x[1]
+            )[1:50]
+
+            matched_products = []
+
+            for i in product_list_sorted:
+
+                product_index = i[0]
+
+                product = products.iloc[product_index]
+
+                # CATEGORY CHECK
+                if category != "All":
+                    if product['Category'] != category:
+                        continue
+
+                # COLOR CHECK
+                if color != "All":
+                    if (
+                        str(product['Color']).strip().lower()
+                        != color.strip().lower()
+                    ):
+                        continue
+
+                matched_products.append(product)
+
+            # ONLY REPLACE IF MATCH EXISTS
+            if matched_products:
+
+                filtered_products = pd.DataFrame(matched_products)
+
+        except:
+            pass
+
+    # REMOVE DUPLICATES
+    filtered_products = filtered_products.drop_duplicates(
+        subset='Product Name'
+    )
+
+    # SORT BY SIMILARITY DESCENDING
+    if product_name:
+
+        try:
+
+            selected_index = products[
+                products['Product Name'] == product_name
+            ].index[0]
+
+            filtered_products['similarity_score'] = (
+                filtered_products['Product Name']
+                .apply(
+                    lambda x: similarity[selected_index][
+                        products[
+                            products['Product Name'] == x
+                        ].index[0]
+                    ]
+                )
+            )
+
+            filtered_products = filtered_products.sort_values(
+                by='similarity_score',
+                ascending=False
+            )
+
+        except:
+            pass
+
+    # FINAL OUTPUT
+    if not filtered_products.empty:
+
+        for _, row in filtered_products.iterrows():
+
+            similarity_score = "Recommended"
+
+            if product_name:
+
+                try:
+
+                    original_index = products[
+                        products['Product Name']
+                        == row['Product Name']
+                    ].index[0]
+
+                    selected_index = products[
+                        products['Product Name']
+                        == product_name
+                    ].index[0]
+
+                    similarity_score = str(
+                        round(
+                            similarity[selected_index][original_index]
+                            * 100,
+                            2
+                        )
+                    ) + '%'
+
+                except:
+                    similarity_score = "Recommended"
+
+            recommended_products.append({
+                'name': row['Product Name'],
+                'category': row['Category'],
+                'similarity': similarity_score
+            })
+
     else:
-        cols = st.columns(len(results))
 
-        for i, (row, score) in enumerate(results):
-            with cols[i]:
-                st.markdown(f"""
-                <div style="
-                    padding:20px;
-                    border-radius:12px;
-                    background: linear-gradient(135deg, #1e1e2f, #2a2a40);
-                    box-shadow:0 4px 15px rgba(0,0,0,0.4);
-                    text-align:center;
-                    color:white;
-                ">
-                    <h3>{row['item']}</h3>
-                    <p style="color:#dddddd;">💲 ₹{row['price']}</p>
-                    <p style="color:#dddddd;">⭐ {row['rating']}</p>
-                    <p style="color:#00ff9c;"><b>Match: {round(score,2)}</b></p>
-                </div>
-                """, unsafe_allow_html=True)
+        recommended_products.append({
+            'name': 'No Products Available',
+            'category': 'Not Available',
+            'similarity': '0%'
+        })
+
+    return recommended_products
+
+
+# HOME PAGE
+@app.route('/', methods=['GET', 'POST'])
+def index():
+
+    recommendations = []
+
+    selected_product = None
+
+    global search_history
+
+    if request.method == 'POST':
+
+        selected_product = request.form.get('product')
+
+        selected_category = request.form.get('category')
+
+        selected_color = request.form.get('color')
+
+        recommendations = recommend(
+            selected_product,
+            selected_category,
+            selected_color
+        )
+
+        # SAVE SEARCH HISTORY
+        if selected_product and selected_product not in search_history:
+
+            search_history.insert(0, selected_product)
+
+        # KEEP ONLY LAST 5
+        search_history = search_history[:5]
+
+    return render_template(
+        'index.html',
+        products=product_list,
+        recommendations=recommendations,
+        selected_product=selected_product,
+        search_history=search_history,
+        trending_products=trending_products,
+        categories=categories,
+        colors=colors
+    )
+
+
+# RUN APP
+if __name__ == '__main__':
+
+    webbrowser.open('http://127.0.0.1:5000')
+
+    app.run(debug=True, use_reloader=True)
